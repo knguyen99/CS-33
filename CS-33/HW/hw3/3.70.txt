@@ -1,0 +1,30 @@
+Khoi Nguyen 
+
+3.70
+
+A)	offset
+e1.p	0 
+e1.y	8
+e2.x	0
+e2.next	8
+
+B) 16 bytes, since it is a union, the structure
+only requires the maximum number of bytes out
+of both the structs, which is 16.
+
+C) void proc(union ele *up){
+	up->e2.x=*(*(up->e2.next)->e1.p)-*(up->e2.next).e1.y;
+}
+
+movq 	8(rdi)	rax	means rax is either y or next
+movq 	(rax)	rdx	means rdx is a pointer to rax, or *(*(rdi+8))
+			making it equal to to *(up->e2.next)
+movq	(rdx)	rdx	means rdx is equal to (rdx + 0) which is
+			*(*(up->e2.nxt).e1.p)
+subq	8(rax)	rdx	means take whatever is in rdx and subtract
+			by rax+8. rdx is a long
+			thus rdx is *(*(up->e2.next).eq.p) - *(up->e2.next).e1.y
+movq	rdx	(rdi)	this sets (rdi + 0) to rdx, since rdx is a long, sets
+			up->e2.x to rdx
+ 
+

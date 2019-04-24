@@ -1,0 +1,51 @@
+Khoi Nguyen 
+
+Pexexlab.txt
+----------------------------------------------------------
+Gather Instruction Traces:
+
+First, to try out the given command, I ran:
+emacs -Q -batch -eval '(print (* 1250284240 -1844255039))'
+
+To start gdb on the exexuteable file, I ran:
+gdb ~eggert/bin64/bin/emacs-26.1 
+
+This opened up gdb. Next I enabled the disassemble-next-line
+option and set the break point at Ftimes. This would cause 
+the program to pause when it reaches Ftimes and print out the
+output in the desired format. Commands:
+(gdb) set disassemble-next-line on
+(gdb) b Ftimes
+
+To run the program, I used the command:
+(gdb) r -batch -eval '(print (* 1250284240 -1844255039))'
+
+Now that the debugger is running with the specific inputs,
+I ran the commands:
+(gdb) si
+to step into the next line of the debugger
+(gdb) info registers
+to view the values stored in each register
+
+and sometimes
+(gdb) x (address)
+to view memory based on a specific hex address
+
+----------------------------------------------------------
+Examining Integer Overflow Handling
+
+First I created a testovf.c file by using the command:
+nano testovf.c
+
+Then I copied and pasted the code from the assignment 
+and saved the file. 
+
+The final commands to view the machine code were:
+gcc -O2 -S testovf.c
+nano testovf.s
+
+gcc -O2 -fwrapv -S testovf.c
+nano testovf.s
+
+gcc -O2 -fsanitize=undefined -S testovf.c
+nano testovf.s

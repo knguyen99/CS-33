@@ -1,0 +1,40 @@
+Khoi Nguyen
+
+random.txt
+
+2.89)
+
+A. True. Converting an int to a double does not change the value
+since doubles have a higher precision than ints, allowing for
+doubles to be able to store all possible ints without losing
+information. Converting to an int, both numbers could be rounded
+however both of will be rounded to the same number.
+
+B. False. The conversion of int to double does not cause the error
+however the subtraction of two ints does. If x-y is outside the range
+of ints, the difference would overflow and cause the answer to 
+be positive due to fwrapv. As for the doubles, if the dx-dy is in the
+range of double precision, the difference would still be negative.
+An example would be INT_MIN for x and dx and 1 for y and dy.
+
+C. True. The range of doubles can store much more information due 
+to the larger amount of bits available. The maximum size of the 
+double can store a value larger than 3*(largest value for ints), 
+thus although this question tests associativity, the double is 
+able to store 3 ints as a double without overflow. 
+
+D. False. In this case, associativity can cause an issue. Doubles
+are allowed to hold 2^52-1 in the fractional part of the bit
+representation. If we have:
+dx = 2^30
+dy = 2^23
+dz = 2^-1
+
+The left hand side would experience overflow thus would wrap to 
+a negative number since 2^30 * 2^30 is greater than 2^52-1. On 
+the right hand side, the product would be calculated without 
+issue since dy*dz would be in the range of doubles and multiplying
+that by dx would still be in the range of doubles.
+
+E. False. If dx = 0 and dz = 2, dx/dx would equal NAN while dz/dz
+= 1.

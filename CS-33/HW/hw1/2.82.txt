@@ -1,0 +1,38 @@
+2.82
+
+A.False. If x is equal to INT_MIN, taking the negative of INT_MIN is 
+INT_MIN, making the second argument false.
+
+B. True. We learned this in class on october 4th. (x+y) << 4 is
+equivalent to (x+y)*16 which is equal to 16x+16y. (16x + 16y)
++y -x is equal to 15x +17y which is  == 17*y+15*x.
+
+C. True. -x = ~x +1
+	-(x+y) = ~(x+y) +1
+	-x-y-1 = ~(x+y)
+
+D.True. When casting from signed to unsigned, the bit representation
+of each of the numbers will remain the same. By casting and negating the y-x, 
+the left and right side will be equivalent. 
+ 
+E.True. The combination of the right and left shift just changes
+the last two bits of x to 00. If the last two bits were already
+00, then after shifting, it is equal to x. All other cases make
+x lose bits, thus lowering the value and making it less than
+pre-shifted x. 
+
+F.True. Because ux is unsigned, shifting to the right one will
+cause the leftmost bit to be 0. The second part of is a left 
+shifted -1 by 32, , which creates a mask to check for the sign 
+of the unsigned x. By adding the two together, the sign of x is 
+copied and placed into most significant bit. This becomes equivalent
+to shifting the signed x to the right once arithmetically.
+
+G.False. If we use the example -9, the bit representation of 
+-9 is 0..010111. -9 % 8 = -1 proved by:
+	 (-9)/8 = -1
+	((-1)*8) + (-9%8) = -9
+	-9%8 = -1 (this must be true)
+7's bit representation is 0..000111. -9 & 7 creates the number
+0..000111. Since -9 % 8 is -1, the bit representation is 1...111111.
+Since 0..000111 does not equal 1...111111, this is incorrect.

@@ -1,0 +1,21 @@
+Khoi Nguyen
+
+answer.txt
+
+12.17)
+	a. The program does not print anything because the function pthread_join is not called.
+	because pthread_join is not called, the main function continues without waiting for the
+	thread to finish, thus the program finishes before anything is printed.
+
+	b. We can fix this bug by changing the exit call on line 10 with a call to pthread_join. 
+	By calling pthread_join, the main routine is forced to wait for the current thread to 
+	finish before it can continue, thus sleep and "Hello, world!\n" is printed before the 
+	program is exits.
+
+
+12.25)
+	Echo_cnt is safe because the variable mutex. Because of this global variable, 
+	mutex protects byte_cnt so that it only calls functions that are safe to call.
+	Mutex is a lock to prevent unsafe function calls. It is not reentrant because
+	mutex is a global variable, thus all threads running share the same variable.
+	Because of this, the function is not reentrant.

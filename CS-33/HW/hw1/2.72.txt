@@ -1,0 +1,16 @@
+
+2.72
+
+A. The sizeof operator always returns a value of type size_t,
+which is an unsigned data type. Because the value is unsigned,
+negative numbers become large positive numbers smaller than
+maxbytes. This means that sizeof(val) will always be a positive
+number less than or equal to maxbytes and maxbytes-sizeof(val)
+will always be greater than or equal to 0.
+
+B. By casting sizeof(val) to an int, sizeof(val) is allowed to be
+a negative number since it is signed. Thus, to make the conditional
+work, the conditional must be changed to :
+        if(maxbytes - (int)sizeof(val) >= 0)
+
+

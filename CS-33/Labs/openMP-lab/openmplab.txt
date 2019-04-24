@@ -1,0 +1,213 @@
+Khoi Nguyen
+
+openmplab.txt
+
+First, I had to bring the file over into the linux server
+using the commands (outside the seasnet server):
+scp Desktop/openmplab.tgz nguyenk@lnxsrv09.seas.ucla.edu:~/cs33/openMP-lab
+
+Next, after logging into my seasnet account,
+ to unzip the file, I used the command:
+tar -xvf openmplab.tgz
+
+To find out how much time I need to speed the program up,
+I must first find out how fast the program goes with out
+alteration. I used the commands:
+cd openmplab
+make seq
+./seq
+
+The output of this is:
+FUNC TIME : 0.741808
+TOTAL TIME : 2.703457
+
+Since GPROF is perfomance analysis tool and displays the bottleneck of the
+function, I now run the command to compile with GPROF enabled:
+make seq GPROF=1
+./seq 
+
+The output of this is:
+FUNC TIME : 0.795092
+TOTAL TIME : 2.960825
+
+Next command to see the analysis of the performance:
+gprof seq | less
+
+The important part of this output is the flat profile which tells which 
+functions are taking the longest (output):
+
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 70.68      0.60     0.60       15    40.05    41.70  func1
+ 15.31      0.73     0.13  5177344     0.00     0.00  rand2
+  3.53      0.76     0.03   491520     0.00     0.00  findIndexBin
+  3.53      0.79     0.03                             filter
+  2.36      0.81     0.02        2    10.01    10.01  init
+  2.36      0.83     0.02        1    20.03   125.49  addSeed
+  1.18      0.84     0.01       15     0.67     0.67  func4
+  1.18      0.85     0.01        1    10.01    10.01  imdilateDisk
+  0.00      0.85     0.00   983042     0.00     0.00  round
+  0.00      0.85     0.00       16     0.00     0.00  dilateMatrix
+  0.00      0.85     0.00       15     0.00     0.00  func2
+  0.00      0.85     0.00       15     0.00     0.00  func3
+  0.00      0.85     0.00       15     0.00     2.00  func5
+  0.00      0.85     0.00       15     0.00     0.00  rand1
+  0.00      0.85     0.00        2     0.00     0.00  get_time
+  0.00      0.85     0.00        1     0.00     0.00  elapsed_time
+  0.00      0.85     0.00        1     0.00     0.00  fillMatrix
+  0.00      0.85     0.00        1     0.00     0.00  func0
+  0.00      0.85     0.00        1     0.00     0.00  getNeighbors
+
+From this table, we can see that func1 takes up 70.68% of the time. Thus, this
+gives a reason to look into func1 to edit. Commands to look into func1:
+nano func.c
+
+Looking into func1 of func.c, I noticed there are two loops that most likely take
+up most of the time, thus I parallelized the first loop and the outermost nested loop.
+
+
+After parallelizing func1 I ran the commands:
+make omp
+./omp
+./omp
+./omp
+
+I ran the executable 3 times since the times are not always the same, thus I wanted
+to make sure it worked multiple times at ~8x faster speed.
+The output:
+FUNC TIME : 0.097012
+TOTAL TIME : 2.108493
+
+FUNC TIME : 0.091568
+TOTAL TIME : 2.107592
+
+FUNC TIME : 0.096997
+TOTAL TIME : 2.960614
+
+To find out the specific breakdown of the new func.c time breakdown, I ran:
+make omp GPROF=1
+./omp
+gprof omp | less
+
+output:
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 65.16      0.41     0.41        9    45.61    46.84  filter
+ 23.84      0.56     0.15  4222995     0.00     0.00  rand2
+  3.18      0.58     0.02        2    10.01    10.01  init
+  3.18      0.60     0.02        1    20.03   169.19  addSeed
+  3.18      0.62     0.02                             sequence
+  1.59      0.63     0.01       15     0.67     0.67  func5
+  0.00      0.63     0.00   491520     0.00     0.00  findIndexBin
+  0.00      0.63     0.00    39290     0.00     0.00  round
+  0.00      0.63     0.00       16     0.00     0.00  dilateMatrix
+  0.00      0.63     0.00       15     0.00     0.00  func1
+  0.00      0.63     0.00       15     0.00     0.00  func2
+  0.00      0.63     0.00       15     0.00     0.00  func3
+  0.00      0.63     0.00       15     0.00     0.00  func4
+  0.00      0.63     0.00       15     0.00     0.00  rand1
+  0.00      0.63     0.00        2     0.00     0.00  get_time
+  0.00      0.63     0.00        1     0.00     0.00  elapsed_time
+  0.00      0.63     0.00        1     0.00     0.00  fillMatrix
+  0.00      0.63     0.00        1     0.00     0.00  func0
+  0.00      0.63     0.00        1     0.00     0.00  getNeighbors
+  0.00      0.63     0.00        1     0.00     0.00  imdilateDisk
+
+Running with gprof will slowdown func time to: 0.171290
+However, I am only using gprof to show the breakdown an that I reduced
+func1 drastically. Func1 no longer takes up 70.68% of the time.
+
+I realized I can parallelize more function by just adding the line:
+#pragma omp parallel for
+without specifying number of threads and continue to make the program faster.
+The only loops I had to watch for is accumulators, which I used reduction(+:*variable name)
+and loops that accessed variables outside the loop, which I added private (*variable name)
+I chose 30 threads because after testing, 30 produced a faster func time. I tested
+20,22,24,26,28, and 30 threads. The thread numbers I tested on didn't affect the func time that
+much so I settled on 30.
+
+I ran the commands:
+make omp
+./omp
+./omp
+./omp
+
+output:
+FUNC TIME : 0.037811
+TOTAL TIME : 2.099127
+
+FUNC TIME : 0.036254
+TOTAL TIME : 2.081825
+
+FUNC TIME : 0.036339
+TOTAL TIME : 2.053062
+
+This sped up the function by ~26x
+
+I ran:
+make check 
+To make sure the output is correct.
+
+The diff command in the make check command produce 0 output
+thus I know that the output.txt is the same as the correct.txt.
+
+Next, we check for memory leaks using the commands:
+make omp MTRACE=1
+./omp
+make checkmem
+
+The output for this is:
+Memory not freed:
+-----------------
+           Address     Size     Caller
+addr2line: 'filter': No such file
+0x000000000234e100     0xd0  at 
+0x000000000234e1e0   0x1e90  at 
+0x0000000002350080     0xc0  at 
+addr2line: 'filter': No such file
+0x0000000002350150     0xf8  at 
+addr2line: 'filter': No such file
+0x0000000002350250    0x240  at 
+0x00000000023504a0    0x240  at 
+0x00000000023506f0    0x240  at 
+0x0000000002350940    0x240  at 
+0x0000000002350b90    0x240  at 
+0x0000000002350de0    0x240  at 
+0x0000000002351030    0x240  at 
+0x0000000002351280    0x240  at 
+0x00000000023514d0    0x240  at 
+0x0000000002351720    0x240  at 
+0x0000000002351970    0x240  at 
+0x0000000002351bc0    0x240  at 
+0x0000000002351e10    0x240  at 
+0x0000000002352060    0x240  at 
+0x00000000023522b0    0x240  at 
+0x0000000002352500    0x240  at 
+0x0000000002352750    0x240  at 
+0x00000000023529a0    0x240  at 
+0x0000000002352bf0    0x240  at 
+0x0000000002352e40    0x240  at 
+0x0000000002353090    0x240  at 
+0x00000000023532e0    0x240  at 
+0x0000000002353530    0x240  at 
+0x0000000002353780    0x240  at 
+0x00000000023539d0    0x240  at 
+0x0000000002353c20    0x240  at 
+0x0000000002353e70    0x240  at 
+0x00000000023540c0    0x240  at 
+0x0000000002354310    0x240  at 
+
+However because I did not allocate any memory in the func1, this error is okay. 
+After checking gdb at address 0x240, I furthermore found nothing.
+
+Lastly, I ran the command:
+expand func.c openmplab.txt |
+  awk '/\r/ || 200 < length'
+
+And it produced nothing, and I am ready to turn in.

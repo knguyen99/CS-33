@@ -1,0 +1,10 @@
+Khoi Nguyen
+
+_Alignas.txt
+
+
+The size of the struct is 16 because char b has the alignment of 8
+while the other two chars have an sizeof of 1. This means that
+the alignment of the entire struct is 8, thus the sizeof must be
+a multiple of the alignment, and the smallest sizeof available
+is 16. 

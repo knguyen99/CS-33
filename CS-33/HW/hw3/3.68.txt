@@ -1,0 +1,14 @@
+Khoi Nguyen
+
+3.68
+
+From line 2 of the assembly code, we can learn that 4 < B <= 8.
+This is because ints take 4 bytes and chars take 1 byte so 
+the size of the char array can be between 5 and 8. From line 3, we
+learn that 24 < B + A*2 <= 32. This is because shorts are 2 bytes
+and longs are 8 bytes. From the last line, we learn 176 < A*B*4 <= 184,
+or 44 < A*B <= 46. Since B is between 5 and 8 and A*B is either 45 or 
+46, B is 5 and A is 9.
+
+A = 9.
+B = 5.

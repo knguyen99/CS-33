@@ -1,0 +1,82 @@
+Khoi Nguyen
+
+testovf.txt
+
+Compiling with -O2:
+
+        .file   "testovf.c"
+        .text
+	.p2align 4,,15
+        .globl  testovf
+        .type   testovf, @function
+testovf:
+.LFB0:
+      	.cfi_startproc
+        xorl    %eax, %eax
+        ret
+	.cfi_endproc
+.LFE0:
+      	.size   testovf, .-testovf
+        .ident  "GCC: (GNU) 4.8.5 20150623 (Red Hat 4.8.5-28)"
+        .section        .note.GNU-stack,"",@progbits
+
+Compiling with -O2 -fwrapv:
+
+        .file   "testovf.c"
+        .text
+	.p2align 4,,15
+        .globl  testovf
+        .type   testovf, @function
+testovf:
+.LFB0:
+      	.cfi_startproc
+        movabsq $9223372036854775807, %rax
+        addq    %rdi, %rax
+        cmpq    %rdi, %rax
+        setl    %al
+        ret
+	.cfi_endproc
+.LFE0:
+      	.size   testovf, .-testovf
+        .ident  "GCC: (GNU) 4.8.5 20150623 (Red Hat 4.8.5-28)"
+        .section        .note.GNU-stack,"",@progbits
+
+
+Compiling with -O2 -fsanitize=undefined:
+        
+	.file   "testovf.c"
+        .text
+	.p2align 4,,15
+        .globl  testovf
+        .type   testovf, @function
+testovf:
+.LFB0:
+      	.cfi_startproc
+        xorl    %eax, %eax
+        ret
+	.cfi_endproc
+.LFE0:
+      	.size   testovf, .-testovf
+        .ident  "GCC: (GNU) 8.2.0"
+        .section        .note.GNU-stack,"",@progbits
+
+
+In the three compilations, the compilation with -fwrapv is the only compilation
+that produces different machine code. -O2 and -O2 -fsanitize=undefined produces
+the same xorl of the %eax register and returns after that. 
+
+For the first compilation, it is returns false always because n + 9223372036854775807
+will always be larger than n. Because of the optimization level, the program only runs
+xor to return false always. There was no handling of overflow cases, since it always
+returns false.
+
+For the second compilation, the function  adds 9223372036854775807 to n, and then compares
+it to n. By turning on fwrapv, the addition of the n and 9223372036854775807 will cause 
+the sum to overflow positively and wrap around to a negative number. The sum compared to 
+n will return if true because the overflow will cause (n+9223372036854775807) to be less 
+than n.
+
+For the third compilation, we get the same xor as using just -O2. This is  possibly
+becasue with the -fsanitize=undefined turned on, the program handles overflows by 
+emitting errors when it occurs. However, because (n+9223372036854775807) should always
+be greater than n, false should always be returned. 
