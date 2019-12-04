@@ -1,5 +1,5 @@
 # CS33
-Computer Science 33 Introduction to Computer Organization in UCLA  
+Computer Science 33 Introduction to Computer Organization at UCLA  
 Fall 2018 
 Eggert  
 
